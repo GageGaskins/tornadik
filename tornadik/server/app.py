@@ -24,5 +24,5 @@ if __name__ == "__main__":
     print("I'm running")
     tornado.platform.asyncio.AsyncIOMainLoop().install()
     application = make_app()
-    application.listen(6969, address='127.0.0.1')
+    application.listen(7000, address='127.0.0.1')
     asyncio.get_event_loop().run_forever()
