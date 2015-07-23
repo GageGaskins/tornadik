@@ -13,7 +13,7 @@ class PiwikClient():
         self.site_id = settings.PIWIK_SITEID
         self.url = settings.PIWIK_URL
         self.period = 'day'
-        self.date = 'last7'
+        self.date = 'last30'
 
     @property
     def base_single_request_url(self):
@@ -63,10 +63,10 @@ class PiwikClient():
         :return: Node data and any child data
         """
 
-        node_id = kwargs.get('nodeID', None)
-        method = kwargs.get('method', 'VisitsSummary.get')
-        date = kwargs.get('date', 'last20')
-        period = kwargs.get('period', 'day')
+        node_id = kwargs['nodeID']
+        method = kwargs['method'] or 'VisitsSummary.get'
+        date = kwargs['date'] or self.date
+        period = kwargs['period'] or self.period
 
         request = yield from aiohttp.request('get', settings.API_HOST + 'nodes/{}/children'.format(node_id))
         response = yield from request.json()
@@ -140,9 +140,9 @@ class PiwikClient():
         if file_guids is None:
             pass
 
-        method = kwargs.get('method', 'VisitsSummary.get')
-        date = kwargs.get('date', 'last20')
-        period = kwargs.get('period', 'day')
+        method = kwargs['method'] or 'VisitsSummary.get'
+        date = kwargs['date'] or self.date
+        period = kwargs['period'] or self.period
 
         bulk_node_file_url = self.base_bulk_request_url
         url_parameters = furl.furl()
