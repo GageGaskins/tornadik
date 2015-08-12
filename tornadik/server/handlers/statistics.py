@@ -1,6 +1,7 @@
 import tornado.web
 import tornado.gen
 
+import json
 import aiohttp
 
 from tornadik.piwik import piwik
@@ -40,9 +41,10 @@ class NodeFileDataHandler(core.BaseHandler):
         period = self.get_argument('period', None)
         date = self.get_argument('date', None)
 
-        if self.request.arguments.get('files[]'):
-            files_guids = [guid.decode("utf-8") for guid in self.request.arguments.get('files[]')]
-            response = yield from piwik_client.bulk_node_file_data(files=files_guids, method=method, period=period, date=date)
+        files = json.loads(self.get_argument('files', None))
+
+        if files:
+            response = yield from piwik_client.bulk_node_file_data(files=files, method=method, period=period, date=date)
 
             self.write(response)
             return

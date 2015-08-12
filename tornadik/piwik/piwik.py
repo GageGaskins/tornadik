@@ -4,6 +4,8 @@ import asyncio
 import furl
 import urllib.parse
 
+import pprint
+
 from tornadik.piwik import settings
 
 class PiwikClient():
@@ -12,8 +14,8 @@ class PiwikClient():
         self.auth_token = settings.PIWIK_TOKEN
         self.site_id = settings.PIWIK_SITEID
         self.url = settings.PIWIK_URL
-        self.period = 'day'
-        self.date = 'last30'
+        self.period = settings.PIWIK_PERIOD
+        self.date = settings.PIWIK_DATE
 
     @property
     def base_single_request_url(self):
@@ -53,23 +55,28 @@ class PiwikClient():
     @asyncio.coroutine
     def bulk_node_data(self, **kwargs):
         """
-        Async call to Piwik that returns data for current node as well as any children if they exist.
+        Async call to Piwik that returns data for current node as well as any components if they exist.
         :param kwargs: {
                     nodeID: GUID of the node calling statistics page
                     method: Optional, specifies specific type of data retrieved from Piwik, defaults to Visits
                     period: Optional, specifies what type of period Piwik archives data retrieved, defaults to 'day'
-                    date: Optional, specifies range of data for Piwik to retrieve, defaults to 'last7' to get past week's
+                    date: Optional, specifies range of data for Piwik to retrieve, defaults to 'last30' to get past week's
                 }
         :return: Node data and any child data
         """
+
+        node_data = {
+            'node': [],
+            'children': []
+        }
 
         node_id = kwargs['nodeID']
         method = kwargs['method'] or 'VisitsSummary.get'
         date = kwargs['date'] or self.date
         period = kwargs['period'] or self.period
 
-        request = yield from aiohttp.request('get', settings.API_HOST + 'nodes/{}/children'.format(node_id))
-        response = yield from request.json()
+        osf_api_request = yield from aiohttp.request('get', settings.API_HOST + 'nodes/{}/children?page[size]=999'.format(node_id))
+        osf_api_response = yield from osf_api_request.json()
 
         bulk_node_url = self.base_bulk_request_url
 
@@ -86,7 +93,7 @@ class PiwikClient():
 
         bulk_node_url += '&urls[0]={}'.format(urllib.parse.quote(url_parameters.querystr))
 
-        for idx, child in enumerate(response['data']):
+        for idx, child in enumerate(osf_api_response['data']):
             child_parameters = {
                 'idSite': self.site_id,
                 'method': method,
@@ -101,22 +108,30 @@ class PiwikClient():
         piwik_data = yield from self.make_request(bulk_node_url)
 
         node_data = {
-            'node': {
-                node_id: piwik_data[0]
-            },
-            'children': {}
+            'node': [
+                {
+                    'node_id': node_id,
+                    'title': '',
+                    'data': piwik_data[0]
+                }
+            ],
+            'children': []
         }
 
         dates = []
         for date in piwik_data[0]:
             dates.append(date)
 
-        node_data['dates'] = dates
+        node_data['dates'] = sorted(dates)
 
         if len(piwik_data) > 1:
-            for idx, child in enumerate(response['data']):
-                child_id = child['id']
-                node_data['children'][child_id] = piwik_data[idx+1]
+            for idx, child in enumerate(osf_api_response['data']):
+                child_node = {
+                    'node_id': child['id'],
+                    'title': child['title'],
+                    'data': piwik_data[idx+1]
+                }
+                node_data['children'].append(child_node)
         else:
             node_data['children'] = []
 
@@ -131,13 +146,13 @@ class PiwikClient():
                            as file GUID's are passed through a 'GET' argument to Tornado from OSF javascript call.
                     method: Optional, specifies type of data retrieved from Piwik, defaults to VisitsSummary.get
                     period: Optional, specifies what type of period Piwik archives data retrieved, defaults to 'day'
-                    date: Optional, specifies range of data for Piwik to retrieve, defaults to 'last7' to get past week's
+                    date: Optional, specifies range of data for Piwik to retrieve, defaults to 'last30' to get past week's
                 }
         :return: Formatted Piwik Bulk node file data
         """
-        file_guids = kwargs.get('files', None)
+        files = kwargs['files']
 
-        if file_guids is None:
+        if files is None:
             pass
 
         method = kwargs['method'] or 'VisitsSummary.get'
@@ -147,7 +162,7 @@ class PiwikClient():
         bulk_node_file_url = self.base_bulk_request_url
         url_parameters = furl.furl()
 
-        for idx, id in enumerate(file_guids):
+        for idx, id in enumerate(files.keys()):
             file_parameters = {
                 'idSite': self.site_id,
                 'method': method,
@@ -162,11 +177,16 @@ class PiwikClient():
         piwik_data = yield from self.make_request(bulk_node_file_url)
 
         file_data = {
-            'files': {}
+            'files': []
         }
 
-        for idx, guid in enumerate(file_guids):
-            file_data['files'][guid] = piwik_data[idx]
+        for idx, guid in enumerate(files.keys()):
+            file_node = {
+                'node_id': guid,
+                'title': files[guid],
+                'data': piwik_data[idx]
+            }
+            file_data['files'].append(file_node)
 
         return file_data
 
