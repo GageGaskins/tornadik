@@ -12,8 +12,9 @@ from tornadik.server.handlers import statistics
 def make_app():
     app = tornado.web.Application(
         [
-            (r'/(?P<nodeID>\w*)/nodeData', statistics.NodeDataHandler),
-            (r'/fileData', statistics.NodeFileDataHandler)
+            (r'/(?P<nodeId>\w*)/nodeData', statistics.NodeDataHandler),
+            (r'/fileData', statistics.NodeFileDataHandler),
+            (r'/statistics', statistics.StatisticsHandler)
         ],
         debug=True
     )
@@ -21,7 +22,6 @@ def make_app():
     return app
 
 if __name__ == "__main__":
-    print("I'm running")
     tornado.platform.asyncio.AsyncIOMainLoop().install()
     application = make_app()
     application.listen(7000, address='127.0.0.1')

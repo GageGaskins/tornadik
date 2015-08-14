@@ -1,6 +1,8 @@
 import aiohttp
 import asyncio
 
+import tornado.web
+
 import furl
 import urllib.parse
 
@@ -56,12 +58,11 @@ class PiwikClient():
     def bulk_node_data(self, **kwargs):
         """
         Async call to Piwik that returns data for current node as well as any components if they exist.
-        :param kwargs: {
-                    nodeID: GUID of the node calling statistics page
-                    method: Optional, specifies specific type of data retrieved from Piwik, defaults to Visits
-                    period: Optional, specifies what type of period Piwik archives data retrieved, defaults to 'day'
-                    date: Optional, specifies range of data for Piwik to retrieve, defaults to 'last30' to get past week's
-                }
+        :param str **kwargs nodeId: Guid of the node
+        :param str **kwargs method: Optional, specifies type of data retrieved from Piwik. Defaults to Visits
+        :param str **kwargs period: Optional, specifies type of period Piwik archives data retrieved. Defaults to 'day'
+        :param str **kwargs date: Optional, specifies range of data for Piwik to retrieve. Defaults to 'last30'
+
         :return: Node data and any child data
         """
 
@@ -70,12 +71,16 @@ class PiwikClient():
             'children': []
         }
 
-        node_id = kwargs['nodeID']
+        node_id = kwargs['nodeId']
         method = kwargs['method'] or 'VisitsSummary.get'
         date = kwargs['date'] or self.date
         period = kwargs['period'] or self.period
 
         osf_api_request = yield from aiohttp.request('get', settings.API_HOST + 'nodes/{}/children?page[size]=999'.format(node_id))
+
+        if osf_api_request.status != 200:
+            raise tornado.web.HTTPError(osf_api_request.status, 'Error retrieving data from OSF')
+
         osf_api_response = yield from osf_api_request.json()
 
         bulk_node_url = self.base_bulk_request_url
@@ -105,7 +110,7 @@ class PiwikClient():
             url_parameters.set(args=child_parameters)
             bulk_node_url += '&urls[{}]={}'.format(idx+1, urllib.parse.quote(url_parameters.querystr))
 
-        piwik_data = yield from self.make_request(bulk_node_url)
+        piwik_data = yield from self.piwik_request(bulk_node_url)
 
         node_data = {
             'node': [
@@ -141,19 +146,18 @@ class PiwikClient():
     def bulk_node_file_data(self, **kwargs):
         """
         Async call to Piwik that returns specified data for passed GUID files.
-        :param kwargs: {
-                    files: List of file GUID's request will call data for. This function acts independent of NodeID
-                           as file GUID's are passed through a 'GET' argument to Tornado from OSF javascript call.
-                    method: Optional, specifies type of data retrieved from Piwik, defaults to VisitsSummary.get
-                    period: Optional, specifies what type of period Piwik archives data retrieved, defaults to 'day'
-                    date: Optional, specifies range of data for Piwik to retrieve, defaults to 'last30' to get past week's
-                }
+
+        :param str **kwargs nodeId: Guid of the node
+        :param str **kwargs method: Optional, specifies type of data retrieved from Piwik. Defaults to Visits
+        :param str **kwargs period: Optional, specifies type of period Piwik archives data retrieved. Defaults to 'day'
+        :param str **kwargs date: Optional, specifies range of data for Piwik to retrieve. Defaults to 'last30'
+
         :return: Formatted Piwik Bulk node file data
         """
         files = kwargs['files']
 
         if files is None:
-            pass
+            return {'files': []}
 
         method = kwargs['method'] or 'VisitsSummary.get'
         date = kwargs['date'] or self.date
@@ -174,7 +178,7 @@ class PiwikClient():
             url_parameters.set(args=file_parameters)
             bulk_node_file_url += '&urls[{}]={}'.format(idx, urllib.parse.quote(str(url_parameters.query)))
 
-        piwik_data = yield from self.make_request(bulk_node_file_url)
+        piwik_data = yield from self.piwik_request(bulk_node_file_url)
 
         file_data = {
             'files': []
@@ -195,7 +199,7 @@ class PiwikClient():
 
         single_url = furl.furl(self.base_single_request_url)
 
-        node_id = kwargs.get('nodeID', None)
+        node_id = kwargs.get('nodeId', None)
         method = kwargs.get('method', 'VisitsSummary.get')
         date = kwargs.get('date', 'last7')
         period = kwargs.get('period', 'day')
@@ -212,14 +216,12 @@ class PiwikClient():
         return single_url.url
 
     @asyncio.coroutine
-    def make_request(self, url):
+    def piwik_request(self, url):
         request = yield from aiohttp.request('get', url)
+
+        if request.status != 200:
+            raise tornado.web.HTTPError(request.status, 'Error retrieving Piwik Data')
+
         response = yield from request.json()
 
         return response
-
-
-
-if __name__ == '__main__':
-    piwik = PiwikClient()
-    asyncio.get_event_loop().run_until_complete(piwik.bulk_node_data(nodeID='f4gnt'))
