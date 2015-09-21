@@ -77,6 +77,8 @@ class PiwikClient():
         period = kwargs['period'] or self.period
 
         osf_api_request = yield from aiohttp.request('get', settings.API_HOST + 'nodes/{}/children?page[size]=999'.format(node_id))
+        osf_request = yield from osf_api_request.request()
+        print(osf_request)
 
         if osf_api_request.status != 200:
             raise tornado.web.HTTPError(osf_api_request.status, 'Error retrieving data from OSF')
