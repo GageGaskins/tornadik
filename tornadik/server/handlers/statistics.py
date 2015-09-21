@@ -55,8 +55,6 @@ class StatisticsHandler(core.BaseHandler):
     @tornado.gen.coroutine
     def get(self, *args, **kwargs):
 
-        print(self.get)
-
         piwik_client = piwik.PiwikClient()
 
         node_id = self.get_argument('nodeId', None)
